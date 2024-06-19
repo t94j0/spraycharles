@@ -13,8 +13,7 @@ repository = "https://github.com/Tw1sm/spraycharles"
 include = ["LICENSE", "CHANGELOG.md"]
 
 [tool.poetry.dependencies]
-python = "^3.8"
-numpy = "^1.22.3"
+python = "^3.9"
 impacket = "^0.9.24"
 requests = "^2.27.1"
 texttable = "^1.6.4"
@@ -27,8 +26,8 @@ discord-webhook = "^0.15.0"
 rich = "^12.0.1"
 
 [tool.poetry.dev-dependencies]
-numpy = "^1.22.3"
 impacket = "^0.9.24"
+numpy = "^2.0.0"
 requests = "^2.27.1"
 texttable = "^1.6.4"
 requests_ntlm = "^1.1.0"
