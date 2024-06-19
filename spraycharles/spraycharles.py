@@ -452,8 +452,7 @@ class Spraycharles:
                             if self.jitter_min is None:
                                 self.jitter_min = 0
                             time.sleep(random.randint(self.jitter_min, self.jitter))
-                        # self._login(username, password)
-                        print('username:', username, 'password:', password)
+                        self._login(username, password)
                         progress.update(task, advance=1)
 
                         # log the login attempt
