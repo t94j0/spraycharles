@@ -8,6 +8,7 @@ import sys
 import time
 from pathlib import Path
 from time import sleep
+import typing as T
 
 import click
 import click_config_file
@@ -32,6 +33,7 @@ class Spraycharles:
         self,
         passwords,
         users,
+        userpass,
         host,
         module,
         path,
@@ -70,22 +72,44 @@ class Spraycharles:
                 style="warning",
             )
 
-        # get usernames from file
-        try:
-            with open(users, "r") as f:
-                user_list = f.read().splitlines()
-        except Exception:
-            console.print(
-                f"[!] Error reading usernames from file: {users}", style="danger"
-            )
-            exit()
+        userpass_list: T.List[T.Tuple[str]] = []
 
-        # get passwords from file, otherwise treat arg as a single password to spray
-        try:
-            with open(passwords, "r") as f:
-                password_list = f.read().splitlines()
-        except Exception:
-            password_list = [passwords]
+        if userpass:
+            try:
+                with open(userpass, 'r') as f:
+                    for line in f:
+                        u, p = line.strip().split(':', 1)
+                        userpass_list.append((u, p))
+            except Exception as e:
+                print(e)
+                console.print(
+                    f"[!] Error reading usernames:passwords from file: {userpass}", style="danger"
+                )
+
+                exit()
+
+        if not userpass:
+            # get usernames from file
+            try:
+                with open(users, "r") as f:
+                    user_list = f.read().splitlines()
+            except Exception:
+                console.print(
+                    f"[!] Error reading usernames from file: {users}", style="danger"
+                )
+                exit()
+
+        if not userpass:
+            # get passwords from file, otherwise treat arg as a single password to spray
+            try:
+                with open(passwords, "r") as f:
+                    password_list = f.read().splitlines()
+            except Exception:
+                password_list = [passwords]
+
+        if userpass:
+            user_list = []
+            password_list = []
 
         # check that interval and attempt args are supplied together
         if interval and not attempts:
@@ -165,6 +189,7 @@ class Spraycharles:
         self.password_file = passwords
         self.usernames = user_list
         self.user_file = users
+        self.userpass = userpass_list
         self.host = host
         self.module = module
         self.path = path
@@ -409,55 +434,83 @@ class Spraycharles:
 
             self.login_attempts += 1
 
-        # spray using password file
-        for password in self.passwords:
+        if self.userpass:
             # trigger sleep if attempts limit hit
             self._check_sleep()
 
-            # check if user/pass files have been updated and add new entries to current lists
-            # this will let users add (but not remove) users/passwords into the spray as it runs
-            new_users = self._check_file_contents(self.user_file, self.usernames)
-            new_passwords = self._check_file_contents(
-                self.password_file, self.passwords
-            )
-
-            if len(new_users) > 0:
-                console.print(
-                    f"[>] Adding {len(new_users)} new users into the spray!",
-                    style="info",
-                )
-                self.usernames.extend(new_users)
-
-            if len(new_passwords) > 0:
-                console.print(
-                    f"[>] Adding {len(new_passwords)} new passwords to the end of the spray!",
-                    style="info",
-                )
-                self.passwords.extend(new_passwords)
-
-            # print line separator
-            if len(new_passwords) > 0 or len(new_users) > 0:
-                print()
-
             with Progress(transient=True) as progress:
                 task = progress.add_task(
-                    f"[green]Spraying: {password}", total=len(self.usernames)
+                    f"[green]Spraying: userpass list", total=len(self.userpass)
                 )
                 while not progress.finished:
-                    for username in self.usernames:
+                    for username, password in self.userpass:
+                        self._check_sleep()
                         if self.domain:
                             username = f"{self.domain}\\{username}"
+                        print(self.jitter)
                         if self.jitter is not None:
                             if self.jitter_min is None:
                                 self.jitter_min = 0
                             time.sleep(random.randint(self.jitter_min, self.jitter))
-                        self._login(username, password)
+                        # self._login(username, password)
+                        print('username:', username, 'password:', password)
                         progress.update(task, advance=1)
 
                         # log the login attempt
                         logging.info(f"Login attempted as {username}")
+                        self.login_attempts += 1
 
-            self.login_attempts += 1
+
+        else:
+            # spray using password file
+            for password in self.passwords:
+                # trigger sleep if attempts limit hit
+                self._check_sleep()
+
+                # check if user/pass files have been updated and add new entries to current lists
+                # this will let users add (but not remove) users/passwords into the spray as it runs
+                new_users = self._check_file_contents(self.user_file, self.usernames)
+                new_passwords = self._check_file_contents(
+                    self.password_file, self.passwords
+                )
+
+                if len(new_users) > 0:
+                    console.print(
+                        f"[>] Adding {len(new_users)} new users into the spray!",
+                        style="info",
+                    )
+                    self.usernames.extend(new_users)
+
+                if len(new_passwords) > 0:
+                    console.print(
+                        f"[>] Adding {len(new_passwords)} new passwords to the end of the spray!",
+                        style="info",
+                    )
+                    self.passwords.extend(new_passwords)
+
+                # print line separator
+                if len(new_passwords) > 0 or len(new_users) > 0:
+                    print()
+
+                with Progress(transient=True) as progress:
+                    task = progress.add_task(
+                        f"[green]Spraying: {password}", total=len(self.usernames)
+                    )
+                    while not progress.finished:
+                        for username in self.usernames:
+                            if self.domain:
+                                username = f"{self.domain}\\{username}"
+                            if self.jitter is not None:
+                                if self.jitter_min is None:
+                                    self.jitter_min = 0
+                                time.sleep(random.randint(self.jitter_min, self.jitter))
+                            self._login(username, password)
+                            progress.update(task, advance=1)
+
+                            # log the login attempt
+                            logging.info(f"Login attempted as {username}")
+
+                self.login_attempts += 1
 
         # analyze the results to point out possible hits
         analyzer = Analyzer(
@@ -526,15 +579,22 @@ def modules():
     "-p",
     "--passwords",
     "passwords",
-    required=True,
+    required=False,
     help="Filepath of the passwords list or a single password to spray.",
 )
 @click.option(
     "-u",
     "--usernames",
     "usernames",
-    required=True,
+    required=False,
     help="Filepath of the usernames list.",
+)
+@click.option(
+    "-x",
+    "--userpass",
+    "userpass",
+    required=False,
+    help="Filepath of username:password list",
 )
 @click.option(
     "-H",
@@ -660,6 +720,7 @@ def modules():
 def spray(
     passwords,
     usernames,
+    userpass,
     host,
     module,
     path,
@@ -691,6 +752,7 @@ def spray(
     spraycharles = Spraycharles(
         passwords,
         usernames,
+        userpass,
         host,
         module,
         path,
